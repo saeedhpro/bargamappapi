@@ -6,7 +6,7 @@ from models.subscription import SubscriptionPlan
 async def init_db():
     await Tortoise.init(
         db_url="postgres://saeed:saeed%402311@localhost:5432/golbeendb",
-        modules={"models": ["models.user", "models.subscription"]}
+        modules={"models": ["models.user", "models.subscription", "models.history", "models.garden"]}
     )
     await Tortoise.generate_schemas()
 

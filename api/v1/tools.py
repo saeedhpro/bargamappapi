@@ -21,7 +21,7 @@ async def identify_plant(
     )
 
     try:
-        result = await PlantIdentifierService.identify_and_analyze(file)
+        result = await PlantIdentifierService.identify_and_analyze(file, user=current_user)
     except HTTPException as e:
         raise e
     except Exception as e:

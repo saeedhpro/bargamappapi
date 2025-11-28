@@ -6,6 +6,8 @@ from api.v1.auth import router as auth_router
 from api.v1.users import router as users_router
 from api.v1.tools import router as tools_router
 from api.v1.subscriptions import router as subs_router
+from api.v1.garden import router as garden_router
+from fastapi.staticfiles import StaticFiles
 
 from init_db import init_db, init_db_data
 
@@ -24,6 +26,8 @@ app = FastAPI(
     middleware=middleware
 )
 
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 @app.on_event("startup")
 async def startup():
@@ -35,3 +39,4 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(tools_router)
 app.include_router(subs_router)
+app.include_router(garden_router)
