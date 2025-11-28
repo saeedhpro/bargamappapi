@@ -121,9 +121,10 @@ class PlantIdentifierService:
             print(f"LLM Error: {e}")
             care_info = {"description": "اطلاعات تکمیلی دریافت نشد."}
 
-        # --- 4. ذخیره در دیتابیس (بخش جدید) ---
+        history_id = None
+        # مقدار اولیه  # --- 4. ذخیره در دیتابیس (بخش جدید) ---
         try:
-            await PlantHistory.create(
+            history_record = await PlantHistory.create(
                 user=user,
                 image_path=saved_image_url,  # آدرس عکس آپلودی کاربر
                 plant_name=scientific_name,
@@ -132,6 +133,7 @@ class PlantIdentifierService:
                 description=care_info.get('description', ''),
                 details=care_info  # ذخیره کل جیسون نگهداری
             )
+            history_id = history_record.id
         except Exception as e:
             print(f"Database Save Error: {e}")
             # اگر ذخیره در دیتابیس خطا داد، پروسه را متوقف نمی‌کنیم، فقط لاگ می‌زنیم
@@ -139,6 +141,7 @@ class PlantIdentifierService:
         # --- بازگشت نتیجه به کاربر ---
         return {
             "status": "success",
+            "history_id": history_id,
             "plant_name": scientific_name,
             "common_name": common_name_fa,
             "accuracy": accuracy,
