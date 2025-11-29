@@ -139,6 +139,7 @@ class PlantIdentifierService:
             # اگر ذخیره در دیتابیس خطا داد، پروسه را متوقف نمی‌کنیم، فقط لاگ می‌زنیم
 
         # --- بازگشت نتیجه به کاربر ---
+        print(saved_image_url)
         return {
             "status": "success",
             "history_id": history_id,
