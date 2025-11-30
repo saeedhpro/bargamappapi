@@ -30,13 +30,14 @@ class PlantIdentifierService:
     @staticmethod
     async def identify_and_analyze(image_file: UploadFile, user: User):
         """
-        این متد علاوه بر شناسایی، عکس و نتیجه را در دیتابیس برای کاربر ذخیره می‌کند.
+        شناسایی گیاه و ذخیره در دیتابیس.
+        اگر این گیاه قبلاً (توسط هر کاربری) ثبت شده، از اطلاعات قبلی استفاده می‌شود.
         """
 
-        # 1. خواندن فایل یکبار برای همیشه
+        # 1. خواندن فایل
         image_content = await image_file.read()
 
-        # 2. ذخیره فایل روی دیسک (برای دسترسی بعدی)
+        # 2. ذخیره فایل روی دیسک
         file_extension = image_file.filename.split(".")[-1]
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
         file_path = os.path.join(UPLOAD_DIR, unique_filename)
@@ -44,21 +45,17 @@ class PlantIdentifierService:
         with open(file_path, "wb") as buffer:
             buffer.write(image_content)
 
-        # ساخت URL نسبی برای ذخیره در دیتابیس (فرض بر این است که static را mount کرده‌اید)
         saved_image_url = f"/static/uploads/plants/{unique_filename}"
-
-        # 3. آماده‌سازی برای PlantNet
-        # نشانگر فایل را به اول برمی‌گردانیم یا از محتوای خوانده شده استفاده می‌کنیم
-        files = [('images', (image_file.filename, image_content, image_file.content_type))]
-        data = {'organs': 'auto'}
 
         scientific_name = ""
         common_name_fa = ""
         accuracy = 0.0
-        # reference_image برای عکس مرجع خود plantnet است، اما ما عکس کاربر را هم داریم
 
         # --- ارسال به PlantNet ---
         try:
+            files = [('images', (image_file.filename, image_content, image_file.content_type))]
+            data = {'organs': 'auto'}
+
             req = requests.Request('POST', url=PLANTNET_URL, files=files, data=data)
             prepared = req.prepare()
             s = requests.Session()
@@ -80,12 +77,52 @@ class PlantIdentifierService:
             accuracy = round(best_match['score'] * 100, 1)
 
         except HTTPException as he:
+            if os.path.exists(file_path):
+                os.remove(file_path)
             raise he
         except Exception as e:
+            if os.path.exists(file_path):
+                os.remove(file_path)
             print(f"PlantNet Error: {e}")
             raise HTTPException(status_code=500, detail="خطای سرور در شناسایی گیاه")
 
-        # --- ارسال به GPT برای اطلاعات نگهداری ---
+        # --- 🔍 چک کردن: آیا این گیاه قبلاً (توسط هر کسی) ثبت شده؟ ---
+        try:
+            existing_record = await PlantHistory.filter(
+                plant_name=scientific_name  # فقط براساس نام گیاه
+            ).first()
+
+            if existing_record:
+                # اگر رکورد وجود داشت، فایل جدید را پاک می‌کنیم
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+
+                # رکورد جدید برای این کاربر با اطلاعات قبلی ایجاد می‌کنیم
+                new_record = await PlantHistory.create(
+                    user=user,
+                    image_path=saved_image_url,
+                    plant_name=existing_record.plant_name,
+                    common_name=existing_record.common_name,
+                    accuracy=existing_record.accuracy,
+                    description=existing_record.description,
+                    details=existing_record.details
+                )
+
+                return {
+                    "status": "existing",
+                    "history_id": new_record.id,
+                    "plant_name": existing_record.plant_name,
+                    "common_name": existing_record.common_name,
+                    "accuracy": existing_record.accuracy,
+                    "image_url": saved_image_url,
+                    "description": existing_record.description,
+                    **(existing_record.details or {})
+                }
+
+        except Exception as e:
+            print(f"Database Check Error: {e}")
+
+        # --- اگر رکورد وجود نداشت، GPT فراخوانی می‌شود ---
         care_info = {}
         try:
             prompt = (
@@ -121,31 +158,28 @@ class PlantIdentifierService:
             print(f"LLM Error: {e}")
             care_info = {"description": "اطلاعات تکمیلی دریافت نشد."}
 
+        # --- ذخیره رکورد جدید ---
         history_id = None
-        # مقدار اولیه  # --- 4. ذخیره در دیتابیس (بخش جدید) ---
         try:
             history_record = await PlantHistory.create(
                 user=user,
-                image_path=saved_image_url,  # آدرس عکس آپلودی کاربر
+                image_path=saved_image_url,
                 plant_name=scientific_name,
                 common_name=common_name_fa,
                 accuracy=accuracy,
                 description=care_info.get('description', ''),
-                details=care_info  # ذخیره کل جیسون نگهداری
+                details=care_info
             )
             history_id = history_record.id
         except Exception as e:
             print(f"Database Save Error: {e}")
-            # اگر ذخیره در دیتابیس خطا داد، پروسه را متوقف نمی‌کنیم، فقط لاگ می‌زنیم
 
-        # --- بازگشت نتیجه به کاربر ---
-        print(saved_image_url)
         return {
             "status": "success",
             "history_id": history_id,
             "plant_name": scientific_name,
             "common_name": common_name_fa,
             "accuracy": accuracy,
-            "image_url": saved_image_url,  # برای نمایش در اپلیکیشن
+            "image_url": saved_image_url,
             **care_info
         }
