@@ -89,7 +89,7 @@ class PlantIdentifierService:
         # --- 🔍 چک کردن: آیا این گیاه قبلاً (توسط هر کسی) ثبت شده؟ ---
         try:
             existing_record = await PlantHistory.filter(
-                plant_name=scientific_name  # فقط براساس نام گیاه
+                commone_name=common_name_fa  # فقط براساس نام گیاه
             ).first()
 
             if existing_record:
