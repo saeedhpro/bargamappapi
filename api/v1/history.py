@@ -18,8 +18,6 @@ async def get_plants_history(
 ):
     offset = (page - 1) * limit
 
-    # 1. شروع کوئری
-    # اگر فقط برای کاربر جاری است: PlantHistory.filter(user=current_user)
     query = PlantHistory.all()
 
     if search:
@@ -31,12 +29,11 @@ async def get_plants_history(
     try:
         plants = await query.order_by('-created_at').offset(offset).limit(limit)
 
-        # 2. ساخت base_url برای تصاویر
         base_url = str(request.base_url).rstrip('/')
         results = []
 
         for plant in plants:
-            # 3. تبدیل آدرس نسبی به مطلق
+            # 1. مدیریت آدرس عکس
             full_image_url = None
             if plant.image_path:
                 if not plant.image_path.startswith('http'):
@@ -45,14 +42,20 @@ async def get_plants_history(
                 else:
                     full_image_url = plant.image_path
 
-            # 4. ساخت response با URL کامل
+            # 2. ساخت ریسپانس با استفاده مستقیم از فیلدهای مدل
             results.append(PlantHistoryResponse(
                 id=plant.id,
                 plant_name=plant.plant_name,
                 common_name=plant.common_name,
                 image_path=full_image_url,
                 details=plant.details if plant.details else {},
-                created_at=plant.created_at
+                created_at=plant.created_at,
+
+                # === اصلاحات اصلی ===
+                # چون در مدل فیلد accuracy وجود دارد، مستقیماً آن را می‌خوانیم
+                accuracy=plant.accuracy,
+
+                description=plant.description if plant.description else ""
             ))
 
         return results
