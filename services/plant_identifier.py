@@ -85,8 +85,6 @@ class PlantIdentifierService:
             scientific_name = best_match["species"]["scientificNameWithoutAuthor"]
             common_names = best_match["species"].get("commonNames", [])
             common_name_fa = common_names[0] if common_names else None
-            persian_name = common_name_fa
-            print(best_match)
             accuracy = round(best_match["score"] * 100, 1)
 
         except Exception as e:
@@ -158,8 +156,6 @@ class PlantIdentifierService:
             # اطلاعات عمومی گیاه از قبل وجود دارد، از آن استفاده کن
             care_info = cached_plant_info.details
             description = cached_plant_info.description
-            if not common_name_fa or common_name_fa == scientific_name:
-                common_name_fa = care_info.get("name_fa", common_name_fa)
         else:
             # اطلاعات وجود ندارد، از GPT بگیر
             try:
@@ -218,7 +214,6 @@ class PlantIdentifierService:
             "history_id": new_history_record.id,
             "plant_name": scientific_name,
             "common_name": common_name_fa,
-            "persian_name": persian_name,
             "image_paths": image_paths,
             "accuracy": accuracy,
             "image_url": saved_image_url,
