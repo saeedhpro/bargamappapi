@@ -195,9 +195,9 @@ class PlantIdentifierService:
                 care_info = json.loads(content)
                 print(care_info)
                 description = care_info.get("description", "")
-                if common_name_fa is None:
+                if common_name_fa is None or common_name_fa == "":
                     common_name_fa = care_info.get("common_name_fa", "")
-                if common_name_fa == "":
+                if common_name_fa is None or common_name_fa == "":
                     common_name_fa = care_info.get("common_name", "")
             except Exception as e:
                 print(f"LLM Error: {e}")
