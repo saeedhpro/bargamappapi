@@ -161,8 +161,16 @@ class PlantIdentifierService:
             try:
                 prompt = (
                     f"گیاهی با نام علمی '{scientific_name}' دارم. "
+                    "لطفاً نام فارسی این گیاه را نیز تعیین کن.\n\n"
+                    "قوانین تعیین نام فارسی:\n"
+                    "1) اگر این گونه (species) نام رسمی فارسی دارد → همان را بده.\n"
+                    "2) اگر نام رسمی ندارد، از اطلاعات معتبر دربارهٔ مبدأ گیاه یک نام غیررسمی بساز "
+                    "(مثلاً گیاهان چینی → «... چینی»، ژاپنی → «... ژاپنی»، ایرانی → «... ایرانی»).\n"
+                    "۳) ترجمه ماشینی یا ساختن نام جعلی ممنوع است.\n"
+                    "۴) اگر نام معتبر پیدا نکردی، مقدار آن باید رشتهٔ خالی باشد («»).\n\n"
                     "خروجی را فقط و فقط یک JSON معتبر با ساختار زیر برگردان:\n"
                     "{\n"
+                    "  \"common_name_fa\": \"نام فارسی یا رشتهٔ خالی\",\n"
                     "  \"description\": \"توضیحات کوتاه (حداکثر ۳ خط)\",\n"
                     "  \"water\": \"خلاصه آبیاری\",\n"
                     "  \"water_detail\": \"توضیح کامل نحوه آبیاری\",\n"
@@ -188,7 +196,8 @@ class PlantIdentifierService:
                 content = chat_response.choices[0].message.content
                 care_info = json.loads(content)
                 description = care_info.get("description", "")
-
+                if common_name_fa is None:
+                    common_name_fa = care_info.get("common_name_fa", "")
             except Exception as e:
                 print(f"LLM Error: {e}")
                 care_info = {}
