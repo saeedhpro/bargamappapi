@@ -124,7 +124,7 @@ class PlantIdentifierService:
         # -------------------------------------------------
         try:
             existing_record = await PlantHistory.filter(
-                common_name=common_name_fa
+                plant_name=scientific_name
             ).first()
 
             if existing_record:
