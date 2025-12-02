@@ -17,21 +17,44 @@ async def add_from_history(
         req: AddFromHistoryRequest,
         current_user: User = Depends(get_current_user)
 ):
+    # ابتدا گیاه مرجع را از تاریخچه پیدا می‌کنیم
     source_plant = await PlantHistory.get_or_none(id=req.history_id)
 
     if not source_plant:
-        raise HTTPException(status_code=404, detail="گیاه مورد نظر یافت نشد")
+        raise HTTPException(status_code=404, detail="گیاه مورد نظر در تاریخچه یافت نشد")
 
+    # --- بخش جدید: بررسی وجود گیاه در باغچه کاربر ---
+    # 1. بررسی اینکه آیا این گیاه قبلاً به باغچه اضافه شده است یا خیر
+    existing_garden_item = await UserGarden.get_or_none(
+        user=current_user,
+        plant_name=source_plant.plant_name
+    )
+
+    # 2. اگر گیاه از قبل در باغچه وجود دارد، خطای 409 (Conflict) برگردان
+    if existing_garden_item:
+        raise HTTPException(
+            status_code=409,  # 409 Conflict: درخواست معتبر است اما به دلیل وضعیت فعلی منبع، قابل انجام نیست
+            detail={
+                "message": "این گیاه از قبل در باغچه شما وجود دارد.",
+                "garden_id": existing_garden_item.id
+            }
+        )
+
+    # --- نکته مهم: استفاده از فیلد جدید image_paths ---
+    # از اولین عکس در لیست (که جدیدترین است) به عنوان عکس باغچه استفاده می‌کنیم
+    main_image = source_plant.image_paths[0] if source_plant.image_paths else None
+
+    # اگر گیاه در باغچه نبود، آن را ایجاد می‌کنیم
     new_garden_item = await UserGarden.create(
         user=current_user,
         plant_name=source_plant.plant_name,
         nickname=req.nickname or source_plant.common_name,
-        image_path=source_plant.image_path,
+        image_path=main_image,  # استفاده از عکس اصلی از لیست
         details=source_plant.details,
         origin_history_id=source_plant.id
     )
 
-    return {"message": "به باغچه اضافه شد", "garden_id": new_garden_item.id}
+    return {"message": "گیاه با موفقیت به باغچه شما اضافه شد.", "garden_id": new_garden_item.id}
 
 
 @router.get("/list", response_model=List[GardenListResponse])
