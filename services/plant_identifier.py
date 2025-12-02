@@ -3,7 +3,6 @@ import json
 import uuid
 import requests
 from datetime import datetime
-from tortoise.expressions import Q
 
 from openai import OpenAI
 from fastapi import UploadFile, HTTPException
@@ -99,7 +98,6 @@ class PlantIdentifierService:
         # 3. بررسی تاریخچه *همین کاربر* برای *همین گیاه*
         # -------------------------------------------------------------------
         existing_user_history = await PlantHistory.filter(
-            user=user,
             plant_name=scientific_name
         ).first()
 
@@ -195,9 +193,12 @@ class PlantIdentifierService:
 
                 content = chat_response.choices[0].message.content
                 care_info = json.loads(content)
+                print(care_info)
                 description = care_info.get("description", "")
                 if common_name_fa is None:
                     common_name_fa = care_info.get("common_name_fa", "")
+                if common_name_fa is None:
+                    common_name_fa = care_info.get("common_name", "")
             except Exception as e:
                 print(f"LLM Error: {e}")
                 care_info = {}

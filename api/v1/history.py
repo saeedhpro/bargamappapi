@@ -19,7 +19,9 @@ async def get_plants_history(
     offset = (page - 1) * limit
 
     query = PlantHistory.all()
-
+    query = query.filter(
+        Q(image_path__isnull=False) & ~Q(image_path="")
+    )
     if search:
         query = query.filter(
             Q(plant_name__icontains=search) |
