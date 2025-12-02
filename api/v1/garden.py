@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, HTTPException, Depends, Request
+from tortoise.expressions import Q
 
 from api.deps import get_current_user
 from models.garden import UserGarden
@@ -59,7 +60,11 @@ async def get_user_garden_list(
         request: Request,
         current_user: User = Depends(get_current_user)
 ):
-    plants = await UserGarden.filter(user=current_user).order_by('-created_at').all()
+    plants = await UserGarden.filter(
+        user=current_user
+    ).filter(
+        Q(image_path__isnull=False) & ~Q(image_path="")
+    ).order_by('-created_at').all()
 
     base_url = str(request.base_url).rstrip('/')
     results = []
