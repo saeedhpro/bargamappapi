@@ -168,7 +168,7 @@ class PlantIdentifierService:
                 "status": "revisited",
                 "history_id": old.id,
                 "plant_name": scientific_name,
-                "common_name_fa": old.common_name_fa,
+                "common_name_fa": old.common_name,
                 "accuracy": accuracy,
                 "image_url": saved_image_url,
                 "image_paths": paths,
