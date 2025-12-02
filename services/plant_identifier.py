@@ -2,7 +2,7 @@ import os
 import json
 import uuid
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 from tortoise.expressions import Q
 
 from openai import OpenAI
@@ -32,10 +32,20 @@ class PlantIdentifierService:
     @staticmethod
     async def identify_and_analyze(image_file: UploadFile, user: User):
         """
-        شناسایی گیاه، ذخیره در تاریخچه و بررسی حضور در باغچه کاربر.
+        شناسایی گیاه، مدیریت هوشمند تاریخچه کاربر و بررسی حضور در باغچه.
+
+        منطق جدید:
+        ۱. گیاه توسط PlantNet شناسایی می‌شود.
+        ۲. بررسی می‌شود که آیا **همین کاربر** قبلاً **همین گیاه** را در تاریخچه خود ثبت کرده است یا خیر.
+           - اگر بله (revisited): رکورد جدیدی ساخته نمی‌شود. فقط عکس رکورد قبلی آپدیت شده و همان اطلاعات بازگردانده می‌شود.
+           - اگر نه (new for user):
+             - بررسی می‌شود آیا اطلاعات عمومی این گیاه در سیستم (توسط کاربر دیگری) کش شده است؟
+               - اگر بله: از اطلاعات کش‌شده استفاده می‌شود.
+               - اگر نه: اطلاعات از سرویس GPT استعلام می‌شود.
+             - در نهایت یک رکورد جدید **برای اولین بار** برای این کاربر و این گیاه در تاریخچه ثبت می‌شود.
         """
 
-        # 1. ذخیره فایل
+        # 1. ذخیره فایل آپلود شده
         image_content = await image_file.read()
         file_extension = image_file.filename.split(".")[-1]
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
@@ -51,7 +61,7 @@ class PlantIdentifierService:
         accuracy = 0.0
 
         # ---------------------------------------
-        # 2. درخواست PlantNet
+        # 2. شناسایی گیاه با PlantNet
         # ---------------------------------------
         try:
             files = [('images', (image_file.filename, image_content, image_file.content_type))]
@@ -65,11 +75,11 @@ class PlantIdentifierService:
             if response.status_code == 404:
                 raise HTTPException(status_code=404, detail="گیاهی شناسایی نشد.")
             if response.status_code != 200:
-                raise HTTPException(status_code=400, detail="خطا در سرویس PlantNet")
+                raise HTTPException(status_code=response.status_code, detail="خطا در سرویس شناسایی گیاه.")
 
             json_result = response.json()
             if not json_result.get("results"):
-                raise HTTPException(status_code=404, detail="هیچ گیاهی پیدا نشد.")
+                raise HTTPException(status_code=404, detail="هیچ گیاهی با این تصویر پیدا نشد.")
 
             best_match = json_result["results"][0]
             scientific_name = best_match["species"]["scientificNameWithoutAuthor"]
@@ -77,163 +87,126 @@ class PlantIdentifierService:
             common_name_fa = common_names[0] if common_names else scientific_name
             accuracy = round(best_match["score"] * 100, 1)
 
-        except HTTPException as he:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            raise he
-
         except Exception as e:
             if os.path.exists(file_path):
                 os.remove(file_path)
+            if isinstance(e, HTTPException):
+                raise e
             print(f"PlantNet Error: {e}")
-            raise HTTPException(status_code=500, detail="خطای سرور در شناسایی گیاه")
+            raise HTTPException(status_code=500, detail="خطای سرور در ارتباط با سرویس شناسایی گیاه.")
 
         # -------------------------------------------------------------------
-        # 3. اگر همین گیاه را زیر 1 دقیقه قبل فرستاده بوده → نتیجه قبلی را بده
+        # 3. بررسی تاریخچه *همین کاربر* برای *همین گیاه*
         # -------------------------------------------------------------------
-        try:
-            one_minute_ago = datetime.utcnow() - timedelta(seconds=60)
-
-            recent_record = await PlantHistory.filter(
-                Q(user=user) &
-                Q(plant_name=scientific_name) &
-                Q(created_at__gte=one_minute_ago)
-            ).first()
-
-            if recent_record:
-                is_in_garden = await UserGarden.filter(
-                    user=user,
-                    plant_name=scientific_name
-                ).exists()
-
-                return {
-                    "status": "recent",
-                    "history_id": recent_record.id,
-                    "plant_name": recent_record.plant_name,
-                    "common_name": recent_record.common_name,
-                    "accuracy": recent_record.accuracy,
-                    "image_url": recent_record.image_path,
-                    "in_garden": is_in_garden,
-                    **(recent_record.details or {})
-                }
-        except Exception as e:
-            print("Recent-check error:", e)
-
-        # -------------------------------------------------
-        # 4. بررسی وجود رکورد قدیمی با همین common_name
-        # -------------------------------------------------
-        try:
-            existing_record = await PlantHistory.filter(
-                plant_name=scientific_name
-            ).first()
-
-            if existing_record:
-
-                new_record = await PlantHistory.create(
-                    user=user,
-                    image_path=saved_image_url,
-                    plant_name=existing_record.plant_name,
-                    common_name=existing_record.common_name,
-                    accuracy=existing_record.accuracy,
-                    description=existing_record.description,
-                    details=existing_record.details
-                )
-
-                is_in_garden = await UserGarden.filter(
-                    user=user,
-                    plant_name=existing_record.plant_name
-                ).exists()
-
-                return {
-                    "status": "existing",
-                    "history_id": new_record.id,
-                    "plant_name": existing_record.plant_name,
-                    "common_name": existing_record.common_name,
-                    "accuracy": existing_record.accuracy,
-                    "image_url": saved_image_url,
-                    "description": existing_record.description,
-                    "in_garden": is_in_garden,
-                    **(existing_record.details or {})
-                }
-
-        except Exception as e:
-            print("Existing-check error:", e)
-
-        # -------------------------------------------------
-        # 5. دریافت اطلاعات تکمیلی از GPT
-        # -------------------------------------------------
-        care_info = {}
-        try:
-            prompt = (
-                f"من گیاهی با نام علمی '{scientific_name}' (نام فارسی: {common_name_fa}) دارم. "
-                "لطفاً خروجی را دقیقاً و فقط به صورت یک JSON معتبر با فیلدهای زیر تولید کن:\n"
-                "{\n"
-                "  \"name_fa\": \"اسم فارسی گیاه\",\n"
-                "  \"description\": \"توضیحات کلی کوتاه (حداکثر ۳ خط)\",\n"
-                "  \"water\": \"خلاصه آبیاری\",\n"
-                "  \"water_detail\": \"توضیح کامل نحوه آبیاری\",\n"
-                "  \"light\": \"میزان نور\",\n"
-                "  \"light_detail\": \"توضیح کامل نور مناسب\",\n"
-                "  \"temp\": \"دمای مناسب\",\n"
-                "  \"fertilizer\": \"کود مناسب\",\n"
-                "  \"difficulty\": \"سختی نگهداری\",\n"
-                "  \"toxicity\": \"وضعیت سمی بودن\"\n"
-                "}"
-                "زبان تمام مقادیر فارسی باشد."
-            )
-
-            chat_response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": "تو یک گیاه‌پزشک متخصص هستی."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"}
-            )
-
-            content = chat_response.choices[0].message.content
-            care_info = json.loads(content)
-
-        except Exception as e:
-            print("LLM Error:", e)
-            care_info = {}
-
-        # -------------------------------------------------
-        # 6. ذخیره رکورد جدید (بدون details اگر خالی بود)
-        # -------------------------------------------------
-        details_value = care_info if care_info else None
-
-        history_id = None
-        try:
-            history_record = await PlantHistory.create(
-                user=user,
-                image_path=saved_image_url,
-                plant_name=scientific_name,
-                common_name=common_name_fa,
-                accuracy=accuracy,
-                description=care_info.get("description", ""),
-                details=details_value
-            )
-            history_id = history_record.id
-
-        except Exception as e:
-            print("Database Save Error:", e)
-
-        # -------------------------------------------------
-        # 7. بررسی وضعیت باغچه
-        # -------------------------------------------------
-        is_in_garden = await UserGarden.filter(
+        existing_user_history = await PlantHistory.filter(
             user=user,
             plant_name=scientific_name
-        ).exists()
+        ).first()
+
+        # اگر کاربر قبلاً این گیاه را اسکن کرده باشد، رکورد جدید نمی‌سازیم
+        if existing_user_history:
+            # عکس جدید را جایگزین عکس قبلی در تاریخچه می‌کنیم
+            old_image_path = existing_user_history.image_path.lstrip('/')
+            if os.path.exists(old_image_path):
+                os.remove(old_image_path)
+            existing_user_history.image_path = saved_image_url
+            existing_user_history.accuracy = accuracy  # دقت شناسایی جدید را ثبت می‌کنیم
+            existing_user_history.created_at = datetime.utcnow()  # زمان اسکن را به‌روز می‌کنیم
+            await existing_user_history.save()
+
+            is_in_garden = await UserGarden.filter(
+                user=user,
+                plant_name=scientific_name
+            ).exists()
+
+            return {
+                "status": "revisited",  # وضعیت جدید برای اعلام اینکه این گیاه قبلاً در تاریخچه بوده
+                "history_id": existing_user_history.id,
+                "plant_name": existing_user_history.plant_name,
+                "common_name": existing_user_history.common_name,
+                "accuracy": accuracy,
+                "image_url": saved_image_url,
+                "in_garden": is_in_garden,
+                "description": existing_user_history.description,
+                **(existing_user_history.details or {})
+            }
+
+        # -------------------------------------------------------------------
+        # 4. اگر برای کاربر جدید است، اطلاعات را آماده می‌کنیم (با استفاده از کش یا GPT)
+        # -------------------------------------------------------------------
+        care_info = {}
+        description = ""
+
+        # ابتدا بررسی می‌کنیم آیا اطلاعات عمومی این گیاه قبلاً توسط کاربر دیگری ذخیره شده (کش)
+        cached_plant_info = await PlantHistory.filter(plant_name=scientific_name, details__isnull=False).first()
+
+        if cached_plant_info:
+            # اطلاعات عمومی گیاه از قبل وجود دارد، از آن استفاده کن
+            care_info = cached_plant_info.details
+            description = cached_plant_info.description
+            if not common_name_fa or common_name_fa == scientific_name:
+                common_name_fa = care_info.get("name_fa", common_name_fa)
+        else:
+            # اطلاعات وجود ندارد، از GPT بگیر
+            try:
+                prompt = (
+                    f"من گیاهی با نام علمی '{scientific_name}' (نام فارسی: {common_name_fa}) دارم. "
+                    "لطفاً خروجی را دقیقاً و فقط به صورت یک JSON معتبر با فیلدهای زیر تولید کن:\n"
+                    "{\n"
+                    "  \"name_fa\": \"اسم فارسی گیاه\",\n"
+                    "  \"description\": \"توضیحات کلی کوتاه (حداکثر ۳ خط)\",\n"
+                    "  \"water\": \"خلاصه آبیاری\",\n"
+                    "  \"water_detail\": \"توضیح کامل نحوه آبیاری\",\n"
+                    "  \"light\": \"میزان نور\",\n"
+                    "  \"light_detail\": \"توضیح کامل نور مناسب\",\n"
+                    "  \"temp\": \"دمای مناسب\",\n"
+                    "  \"fertilizer\": \"کود مناسب\",\n"
+                    "  \"difficulty\": \"سختی نگهداری\",\n"
+                    "  \"toxicity\": \"وضعیت سمی بودن\"\n"
+                    "}"
+                    "زبان تمام مقادیر فارسی باشد."
+                )
+
+                chat_response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "تو یک گیاه‌پزشک متخصص هستی که فقط با فرمت JSON پاسخ می‌دهی."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    response_format={"type": "json_object"}
+                )
+
+                content = chat_response.choices[0].message.content
+                care_info = json.loads(content)
+                description = care_info.get("description", "")
+                if not common_name_fa or common_name_fa == scientific_name:
+                    common_name_fa = care_info.get("name_fa", common_name_fa)
+
+            except Exception as e:
+                print(f"LLM Error: {e}")
+                care_info = {}
+                description = "اطلاعات تکمیلی در حال حاضر در دسترس نیست."
+
+        # -------------------------------------------------
+        # 5. ذخیره رکورد جدید برای اولین بار برای این کاربر
+        # -------------------------------------------------
+        new_history_record = await PlantHistory.create(
+            user=user,
+            image_path=saved_image_url,
+            plant_name=scientific_name,
+            common_name=common_name_fa,
+            accuracy=accuracy,
+            description=description,
+            details=care_info if care_info else None
+        )
 
         return {
             "status": "success",
-            "history_id": history_id,
+            "history_id": new_history_record.id,
             "plant_name": scientific_name,
             "common_name": common_name_fa,
             "accuracy": accuracy,
             "image_url": saved_image_url,
-            "in_garden": is_in_garden,
+            "in_garden": False,
             **(care_info or {})
         }

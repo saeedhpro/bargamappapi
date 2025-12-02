@@ -7,6 +7,7 @@ class PlantHistory(models.Model):
 
     # مسیر عکس ذخیره شده روی سرور
     image_path = fields.CharField(max_length=500, null=True)
+    image_paths = fields.JSONField(default=list, null=True)
 
     plant_name = fields.CharField(max_length=255)  # نام علمی
     common_name = fields.CharField(max_length=255, null=True)  # نام فارسی
