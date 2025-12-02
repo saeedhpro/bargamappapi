@@ -2,13 +2,15 @@ import os
 import json
 import uuid
 import requests
+from datetime import datetime, timedelta
+from tortoise.expressions import Q
+
 from openai import OpenAI
 from fastapi import UploadFile, HTTPException
 
-# ایمپورت مدل‌ها (مسیرها را طبق ساختار پروژه خود چک کنید)
+# مدل‌ها
 from models.history import PlantHistory
 from models.user import User
-# فرض بر این است که مدل UserGarden در فایلی مثل models/garden.py است
 from models.garden import UserGarden
 
 # تنظیمات
@@ -20,8 +22,8 @@ PLANTNET_PROJECT = "all"
 PLANTNET_URL = f"https://my-api.plantnet.org/v2/identify/{PLANTNET_PROJECT}?api-key={PLANTNET_API_KEY}&lang=fa"
 
 client = OpenAI(
-    base_url='https://api.gapgpt.app/v1',
-    api_key='sk-W9TNjsPN32u1XpuDTKB1AxMV5YhYZhYGljk9Go2bqzpQPCEP'
+    base_url="https://api.gapgpt.app/v1",
+    api_key="sk-W9TNjsPN32u1XpuDTKB1AxMV5YhYZhYGljk9Go2bqzpQPCEP"
 )
 
 
@@ -33,7 +35,7 @@ class PlantIdentifierService:
         شناسایی گیاه، ذخیره در تاریخچه و بررسی حضور در باغچه کاربر.
         """
 
-        # 1. خواندن و ذخیره فایل
+        # 1. ذخیره فایل
         image_content = await image_file.read()
         file_extension = image_file.filename.split(".")[-1]
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
@@ -48,15 +50,17 @@ class PlantIdentifierService:
         common_name_fa = ""
         accuracy = 0.0
 
-        # --- 2. ارسال به PlantNet ---
+        # ---------------------------------------
+        # 2. درخواست PlantNet
+        # ---------------------------------------
         try:
             files = [('images', (image_file.filename, image_content, image_file.content_type))]
             data = {'organs': 'auto'}
 
             req = requests.Request('POST', url=PLANTNET_URL, files=files, data=data)
             prepared = req.prepare()
-            s = requests.Session()
-            response = s.send(prepared)
+            session = requests.Session()
+            response = session.send(prepared)
 
             if response.status_code == 404:
                 raise HTTPException(status_code=404, detail="گیاهی شناسایی نشد.")
@@ -64,46 +68,70 @@ class PlantIdentifierService:
                 raise HTTPException(status_code=400, detail="خطا در سرویس PlantNet")
 
             json_result = response.json()
-            if not json_result.get('results'):
+            if not json_result.get("results"):
                 raise HTTPException(status_code=404, detail="هیچ گیاهی پیدا نشد.")
 
-            best_match = json_result['results'][0]
-            scientific_name = best_match['species']['scientificNameWithoutAuthor']
-            common_names = best_match['species'].get('commonNames', [])
+            best_match = json_result["results"][0]
+            scientific_name = best_match["species"]["scientificNameWithoutAuthor"]
+            common_names = best_match["species"].get("commonNames", [])
             common_name_fa = common_names[0] if common_names else scientific_name
-            accuracy = round(best_match['score'] * 100, 1)
+            accuracy = round(best_match["score"] * 100, 1)
 
         except HTTPException as he:
             if os.path.exists(file_path):
                 os.remove(file_path)
             raise he
+
         except Exception as e:
             if os.path.exists(file_path):
                 os.remove(file_path)
             print(f"PlantNet Error: {e}")
             raise HTTPException(status_code=500, detail="خطای سرور در شناسایی گیاه")
 
-        # --- 3. بررسی: آیا اطلاعات این گیاه قبلاً در دیتابیس موجود است؟ ---
+        # -------------------------------------------------------------------
+        # 3. اگر همین گیاه را زیر 1 دقیقه قبل فرستاده بوده → نتیجه قبلی را بده
+        # -------------------------------------------------------------------
+        try:
+            one_minute_ago = datetime.utcnow() - timedelta(seconds=60)
+
+            recent_record = await PlantHistory.filter(
+                Q(user=user) &
+                Q(plant_name=scientific_name) &
+                Q(created_at__gte=one_minute_ago)
+            ).first()
+
+            if recent_record:
+                is_in_garden = await UserGarden.filter(
+                    user=user,
+                    plant_name=scientific_name
+                ).exists()
+
+                return {
+                    "status": "recent",
+                    "history_id": recent_record.id,
+                    "plant_name": recent_record.plant_name,
+                    "common_name": recent_record.common_name,
+                    "accuracy": recent_record.accuracy,
+                    "image_url": recent_record.image_path,
+                    "in_garden": is_in_garden,
+                    **(recent_record.details or {})
+                }
+        except Exception as e:
+            print("Recent-check error:", e)
+
+        # -------------------------------------------------
+        # 4. بررسی وجود رکورد قدیمی با همین common_name
+        # -------------------------------------------------
         try:
             existing_record = await PlantHistory.filter(
                 common_name=common_name_fa
             ).first()
 
             if existing_record:
-                # نکته مهم: اگر اینجا فایل جدید را پاک کنید، تاریخچه کاربر جدید عکس نخواهد داشت.
-                # بهتر است فایل را نگه دارید تا هر کاربر عکس اسکن شده خودش را ببیند.
-                # اما اگر می‌خواهید در فضای سرور صرفه‌جویی کنید، باید از عکس رکورد قدیمی استفاده کنید:
 
-                final_image_url = saved_image_url
-                # اگر میخواهید فایل جدید پاک شود و از عکس قبلی استفاده شود، این بخش را از کامنت درآورید:
-                # if os.path.exists(file_path):
-                #     os.remove(file_path)
-                # final_image_url = existing_record.image_path
-
-                # ثبت تاریخچه جدید
                 new_record = await PlantHistory.create(
                     user=user,
-                    image_path=final_image_url,
+                    image_path=saved_image_url,
                     plant_name=existing_record.plant_name,
                     common_name=existing_record.common_name,
                     accuracy=existing_record.accuracy,
@@ -111,8 +139,6 @@ class PlantIdentifierService:
                     details=existing_record.details
                 )
 
-                # ++++++ بررسی وضعیت باغچه (in_garden) ++++++
-                # چک می‌کنیم آیا کاربری که درخواست داده، این گیاه (با نام علمی یکسان) را در باغچه دارد؟
                 is_in_garden = await UserGarden.filter(
                     user=user,
                     plant_name=existing_record.plant_name
@@ -124,16 +150,18 @@ class PlantIdentifierService:
                     "plant_name": existing_record.plant_name,
                     "common_name": existing_record.common_name,
                     "accuracy": existing_record.accuracy,
-                    "image_url": final_image_url,
+                    "image_url": saved_image_url,
                     "description": existing_record.description,
-                    "in_garden": is_in_garden,  # <--- فلگ اضافه شد
+                    "in_garden": is_in_garden,
                     **(existing_record.details or {})
                 }
 
         except Exception as e:
-            print(f"Database Check Error: {e}")
+            print("Existing-check error:", e)
 
-        # --- 4. اگر گیاه جدید است: دریافت اطلاعات از GPT ---
+        # -------------------------------------------------
+        # 5. دریافت اطلاعات تکمیلی از GPT
+        # -------------------------------------------------
         care_info = {}
         try:
             prompt = (
@@ -163,14 +191,18 @@ class PlantIdentifierService:
                 response_format={"type": "json_object"}
             )
 
-            content_str = chat_response.choices[0].message.content
-            care_info = json.loads(content_str)
+            content = chat_response.choices[0].message.content
+            care_info = json.loads(content)
 
         except Exception as e:
-            print(f"LLM Error: {e}")
-            care_info = {"description": "اطلاعات تکمیلی دریافت نشد."}
+            print("LLM Error:", e)
+            care_info = {}
 
-        # --- 5. ذخیره رکورد جدید ---
+        # -------------------------------------------------
+        # 6. ذخیره رکورد جدید (بدون details اگر خالی بود)
+        # -------------------------------------------------
+        details_value = care_info if care_info else None
+
         history_id = None
         try:
             history_record = await PlantHistory.create(
@@ -179,15 +211,17 @@ class PlantIdentifierService:
                 plant_name=scientific_name,
                 common_name=common_name_fa,
                 accuracy=accuracy,
-                description=care_info.get('description', ''),
-                details=care_info
+                description=care_info.get("description", ""),
+                details=details_value
             )
             history_id = history_record.id
-        except Exception as e:
-            print(f"Database Save Error: {e}")
 
-        # ++++++ بررسی وضعیت باغچه (in_garden) برای گیاه جدید ++++++
-        # ممکن است کاربر قبلا این گیاه را داشته ولی در هیستوری نبوده (یا هیستوری پاک شده)
+        except Exception as e:
+            print("Database Save Error:", e)
+
+        # -------------------------------------------------
+        # 7. بررسی وضعیت باغچه
+        # -------------------------------------------------
         is_in_garden = await UserGarden.filter(
             user=user,
             plant_name=scientific_name
@@ -200,6 +234,6 @@ class PlantIdentifierService:
             "common_name": common_name_fa,
             "accuracy": accuracy,
             "image_url": saved_image_url,
-            "in_garden": is_in_garden,  # <--- فلگ اضافه شد
-            **care_info
+            "in_garden": is_in_garden,
+            **(care_info or {})
         }
