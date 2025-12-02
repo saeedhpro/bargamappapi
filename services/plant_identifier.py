@@ -104,28 +104,40 @@ class PlantIdentifierService:
         ).first()
 
         # اگر کاربر قبلاً این گیاه را اسکن کرده باشد، رکورد جدید نمی‌سازیم
+        # اگر کاربر قبلاً این گیاه را اسکن کرده باشد، رکورد جدید نمی‌سازیم
         if existing_user_history:
-            # عکس جدید را جایگزین عکس قبلی در تاریخچه می‌کنیم
-            old_image_path = existing_user_history.image_path.lstrip('/')
-            if os.path.exists(old_image_path):
-                os.remove(old_image_path)
-            existing_user_history.image_path = saved_image_url
-            existing_user_history.accuracy = accuracy  # دقت شناسایی جدید را ثبت می‌کنیم
-            existing_user_history.created_at = datetime.utcnow()  # زمان اسکن را به‌روز می‌کنیم
+
+            # --- ۱. افزودن عکس جدید به image_paths ---
+            image_paths = existing_user_history.image_paths or []
+
+            # --- ۱. image_path اصلی را تغییر نمی‌دهیم، فقط اگر خالی بود یکبار ست می‌شود ---
+            if not existing_user_history.image_path:
+                existing_user_history.image_path = saved_image_url
+            else:
+                # افزودن عکس جدید به لیست
+                image_paths.append(saved_image_url)
+                existing_user_history.image_paths = image_paths
+
+            # --- ۳. دقت و زمان به‌روزرسانی شود ---
+            existing_user_history.accuracy = accuracy
+            existing_user_history.created_at = datetime.utcnow()
+
             await existing_user_history.save()
 
+            # ---- بررسی حضور در باغچه ----
             is_in_garden = await UserGarden.filter(
                 user=user,
                 plant_name=scientific_name
             ).exists()
 
             return {
-                "status": "revisited",  # وضعیت جدید برای اعلام اینکه این گیاه قبلاً در تاریخچه بوده
+                "status": "revisited",
                 "history_id": existing_user_history.id,
                 "plant_name": existing_user_history.plant_name,
                 "common_name": existing_user_history.common_name,
                 "accuracy": accuracy,
-                "image_url": saved_image_url,
+                "image_url": saved_image_url,  # عکس جدید
+                "image_paths": image_paths,  # همه عکس‌ها
                 "in_garden": is_in_garden,
                 "description": existing_user_history.description,
                 **(existing_user_history.details or {})
@@ -190,11 +202,13 @@ class PlantIdentifierService:
         # -------------------------------------------------
         # 5. ذخیره رکورد جدید برای اولین بار برای این کاربر
         # -------------------------------------------------
+        image_paths = []
         new_history_record = await PlantHistory.create(
             user=user,
             image_path=saved_image_url,
             plant_name=scientific_name,
             common_name=common_name_fa,
+            image_paths=image_paths,
             accuracy=accuracy,
             description=description,
             details=care_info if care_info else None
@@ -205,6 +219,7 @@ class PlantIdentifierService:
             "history_id": new_history_record.id,
             "plant_name": scientific_name,
             "common_name": common_name_fa,
+            "image_paths": image_paths,
             "accuracy": accuracy,
             "image_url": saved_image_url,
             "in_garden": False,
