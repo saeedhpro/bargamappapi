@@ -15,10 +15,10 @@ async def identify_plant(
         images: UploadFile = File(..., alias="images"),
         current_user: User = Depends(get_current_user),
 ):
-    await SubscriptionService.check_and_record_usage(
-        user_id=current_user.id,
-        tool_type=ToolType.PLANT_ID
-    )
+    # await SubscriptionService.check_and_record_usage(
+    #     user_id=current_user.id,
+    #     tool_type=ToolType.PLANT_ID
+    # )
 
     try:
         result = await PlantIdentifierService.identify_and_analyze(images, user=current_user)

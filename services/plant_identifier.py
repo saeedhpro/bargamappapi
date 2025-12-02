@@ -168,7 +168,7 @@ class PlantIdentifierService:
                     "۴) اگر نام معتبر پیدا نکردی، مقدار آن باید رشتهٔ خالی باشد («»).\n\n"
                     "خروجی را فقط و فقط یک JSON معتبر با ساختار زیر برگردان:\n"
                     "{\n"
-                    "  \"common_name_fa\": \"نام فارسی یا رشتهٔ خالی\",\n"
+                    "  \"common_name_fa\": \"نام فارسی رسمی یا غیررسمی\",\n"
                     "  \"description\": \"توضیحات کوتاه (حداکثر ۳ خط)\",\n"
                     "  \"water\": \"خلاصه آبیاری\",\n"
                     "  \"water_detail\": \"توضیح کامل نحوه آبیاری\",\n"
@@ -193,12 +193,13 @@ class PlantIdentifierService:
 
                 content = chat_response.choices[0].message.content
                 care_info = json.loads(content)
-                print(care_info)
+                print(common_name_fa)
                 description = care_info.get("description", "")
                 if common_name_fa is None or common_name_fa == "":
                     common_name_fa = care_info.get("common_name_fa", "")
                 if common_name_fa is None or common_name_fa == "":
                     common_name_fa = care_info.get("common_name", "")
+                print(common_name_fa, "1")
             except Exception as e:
                 print(f"LLM Error: {e}")
                 care_info = {}
@@ -218,8 +219,8 @@ class PlantIdentifierService:
             description=description,
             details=care_info if care_info else None
         )
-
-        return {
+        response = {
+            **(care_info or {}),
             "status": "success",
             "history_id": new_history_record.id,
             "plant_name": scientific_name,
@@ -228,5 +229,6 @@ class PlantIdentifierService:
             "accuracy": accuracy,
             "image_url": saved_image_url,
             "in_garden": False,
-            **(care_info or {})
         }
+        print(response)
+        return response
