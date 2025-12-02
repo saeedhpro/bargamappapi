@@ -8,6 +8,7 @@ class UserGarden(models.Model):
     plant_name = fields.CharField(max_length=255)
     nickname = fields.CharField(max_length=255, null=True)
     image_path = fields.CharField(max_length=500)
+    image_paths = fields.JSONField(default=list, null=True)
     details = fields.JSONField(default={})
 
     origin_history_id = fields.IntField(null=True)

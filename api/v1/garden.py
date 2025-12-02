@@ -40,16 +40,13 @@ async def add_from_history(
             }
         )
 
-    # --- نکته مهم: استفاده از فیلد جدید image_paths ---
-    # از اولین عکس در لیست (که جدیدترین است) به عنوان عکس باغچه استفاده می‌کنیم
-    main_image = source_plant.image_paths[0] if source_plant.image_paths else None
-
     # اگر گیاه در باغچه نبود، آن را ایجاد می‌کنیم
     new_garden_item = await UserGarden.create(
         user=current_user,
         plant_name=source_plant.plant_name,
         nickname=req.nickname or source_plant.common_name,
-        image_path=main_image,  # استفاده از عکس اصلی از لیست
+        image_path=source_plant.image_path,
+        image_paths=source_plant.image_paths,
         details=source_plant.details,
         origin_history_id=source_plant.id
     )
@@ -68,13 +65,25 @@ async def get_user_garden_list(
     results = []
 
     for plant in plants:
-        full_image_url = None
+
+        # full image_path (thumbnail)
+        full_main_url = None
         if plant.image_path:
-            if not plant.image_path.startswith('http'):
-                clean_path = plant.image_path.lstrip('/')
-                full_image_url = f"{base_url}/{clean_path}"
+            if plant.image_path.startswith("http"):
+                full_main_url = plant.image_path
             else:
-                full_image_url = plant.image_path
+                clean_path = plant.image_path.lstrip("/")
+                full_main_url = f"{base_url}/{clean_path}"
+
+        # full image_paths (gallery)
+        full_gallery = []
+        if plant.image_paths:
+            for p in plant.image_paths:
+                if p.startswith("http"):
+                    full_gallery.append(p)
+                else:
+                    clean_path = p.lstrip("/")
+                    full_gallery.append(f"{base_url}/{clean_path}")
 
         display_nickname = plant.nickname if plant.nickname else plant.plant_name
 
@@ -82,11 +91,13 @@ async def get_user_garden_list(
             id=plant.id,
             plant_name=plant.plant_name,
             nickname=display_nickname,
-            image_url=full_image_url,
-            details=plant.details if plant.details else {}
+            image_path=full_main_url,
+            image_paths=full_gallery,
+            details=plant.details or {}
         ))
 
     return results
+
 
 
 @router.delete("/{plant_id}")
