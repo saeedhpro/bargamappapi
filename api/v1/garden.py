@@ -82,19 +82,12 @@ async def delete_garden_item_by_history(
         history_id: int,
         current_user: User = Depends(get_current_user)
 ):
-    """
-    حذف گیاه از باغچه بر اساس ID تاریخچه (origin_history_id).
-    این متد زمانی استفاده می‌شود که کاربر در صفحه جزئیات شناسایی است
-    و می‌خواهد گیاه را از باغچه حذف کند.
-    """
     deleted_count = await UserGarden.filter(
         origin_history_id=history_id,
         user=current_user
     ).delete()
 
     if not deleted_count:
-        # اگر رکوردی پیدا نشد، ممکن است کاربر قبلاً آن را پاک کرده باشد
-        # یا این گیاه اصلاً در باغچه نبوده. در هر صورت خطا برنمی‌گردانیم تا UI خراب نشود.
-        return {"status": "not_found", "message": "رکوردی برای حذف یافت نشد"}
+        raise HTTPException(status_code=404, detail="رکوردی برای حذف یافت نشد")
 
     return {"status": "deleted", "history_id": history_id}
