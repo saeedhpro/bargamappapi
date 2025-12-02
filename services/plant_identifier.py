@@ -84,7 +84,9 @@ class PlantIdentifierService:
             best_match = json_result["results"][0]
             scientific_name = best_match["species"]["scientificNameWithoutAuthor"]
             common_names = best_match["species"].get("commonNames", [])
-            common_name_fa = common_names[0] if common_names else scientific_name
+            common_name_fa = common_names[0] if common_names else None
+            persian_name = common_name_fa
+            print(best_match)
             accuracy = round(best_match["score"] * 100, 1)
 
         except Exception as e:
@@ -224,6 +226,7 @@ class PlantIdentifierService:
             "history_id": new_history_record.id,
             "plant_name": scientific_name,
             "common_name": common_name_fa,
+            "persian_name": persian_name,
             "image_paths": image_paths,
             "accuracy": accuracy,
             "image_url": saved_image_url,

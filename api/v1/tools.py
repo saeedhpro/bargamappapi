@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/v1/tools", tags=["Tools"])
 
 @router.post("/identify-plant")
 async def identify_plant(
-        file: UploadFile = File(..., alias="images"),
+        images: UploadFile = File(..., alias="images"),
         current_user: User = Depends(get_current_user),
 ):
     await SubscriptionService.check_and_record_usage(
@@ -21,7 +21,7 @@ async def identify_plant(
     )
 
     try:
-        result = await PlantIdentifierService.identify_and_analyze(file, user=current_user)
+        result = await PlantIdentifierService.identify_and_analyze(images, user=current_user)
     except HTTPException as e:
         raise e
     except Exception as e:
