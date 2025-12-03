@@ -46,6 +46,15 @@ async def get_plants_history(
                     full_image_url = f"{base_url}/{clean_path}"
                 else:
                     full_image_url = plant.image_path
+            full_gallery = []
+            if plant.image_paths:
+                for p in plant.image_paths:
+                    if p.startswith("http"):
+                        full_gallery.append(p)
+                    else:
+                        clean_path = p.lstrip("/")
+                        full_gallery.append(f"{base_url}/{clean_path}")
+
             garden_item = await UserGarden.filter(
                 user=current_user,
                 origin_history_id=plant.id
@@ -64,6 +73,7 @@ async def get_plants_history(
                 description=plant.description if plant.description else "",
                 in_garden=in_garden,
                 garden_id=garden_id,
+                image_paths=full_gallery
             ))
 
         return results

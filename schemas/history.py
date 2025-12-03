@@ -6,6 +6,7 @@ from datetime import datetime
 class PlantHistoryResponse(BaseModel):
     id: int
     image_path: Optional[str]
+    image_paths: Optional[Dict[str, Any]]
     plant_name: str
     common_name: Optional[str]
     accuracy: float
