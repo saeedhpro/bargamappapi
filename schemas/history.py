@@ -1,12 +1,12 @@
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 
 class PlantHistoryResponse(BaseModel):
     id: int
     image_path: Optional[str]
-    image_paths: Optional[Dict[str, Any]]
+    image_paths: Optional[List[Any]]
     plant_name: str
     common_name: Optional[str]
     accuracy: float
