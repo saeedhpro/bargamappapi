@@ -52,11 +52,7 @@ async def get_plants_history(
                 image_path=full_image_url,
                 details=plant.details if plant.details else {},
                 created_at=plant.created_at,
-
-                # === اصلاحات اصلی ===
-                # چون در مدل فیلد accuracy وجود دارد، مستقیماً آن را می‌خوانیم
                 accuracy=plant.accuracy,
-
                 description=plant.description if plant.description else ""
             ))
 

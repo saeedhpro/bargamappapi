@@ -91,13 +91,6 @@ async def get_user_garden_list(
                     full_gallery.append(f"{base_url}/{clean_path}")
 
         display_nickname = plant.nickname if plant.nickname else plant.plant_name
-        garden_item = await UserGarden.get_or_none(
-            user=current_user,
-            plant_name=plant.plant_name
-        )
-
-        in_garden = garden_item is not None
-        garden_id = garden_item.id if garden_item else None
         results.append(GardenListResponse(
             id=plant.id,
             plant_name=plant.plant_name,
@@ -105,8 +98,8 @@ async def get_user_garden_list(
             image_path=full_main_url,
             image_paths=full_gallery,
             details=plant.details or {},
-            in_garden=in_garden,
-            garden_id=garden_id,
+            in_garden=True,
+            garden_id=plant.id,
         ))
 
     return results
