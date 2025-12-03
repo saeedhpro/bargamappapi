@@ -2,7 +2,10 @@ from fastapi import APIRouter, Query, HTTPException, Depends, Request
 from tortoise.expressions import Q
 from typing import List
 
+from api.deps import get_current_user
+from models.garden import UserGarden
 from models.history import PlantHistory
+from models.user import User
 from schemas.history import PlantHistoryResponse
 
 router = APIRouter(prefix="/api/v1/garden", tags=["History"])
@@ -14,7 +17,7 @@ async def get_plants_history(
         page: int = Query(1, ge=1, description="شماره صفحه"),
         limit: int = Query(20, ge=1, le=100, description="تعداد آیتم در هر صفحه"),
         search: str = Query(None, description="جستجو در نام فارسی یا علمی"),
-        # current_user: User = Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
 ):
     offset = (page - 1) * limit
 
@@ -43,8 +46,13 @@ async def get_plants_history(
                     full_image_url = f"{base_url}/{clean_path}"
                 else:
                     full_image_url = plant.image_path
+            garden_item = await UserGarden.filter(
+                user=current_user,
+                origin_history_id=plant.id
+            ).order_by("-id").first()
 
-            # 2. ساخت ریسپانس با استفاده مستقیم از فیلدهای مدل
+            in_garden = garden_item is not None
+            garden_id = garden_item.id if garden_item else None
             results.append(PlantHistoryResponse(
                 id=plant.id,
                 plant_name=plant.plant_name,
@@ -53,7 +61,9 @@ async def get_plants_history(
                 details=plant.details if plant.details else {},
                 created_at=plant.created_at,
                 accuracy=plant.accuracy,
-                description=plant.description if plant.description else ""
+                description=plant.description if plant.description else "",
+                in_garden=in_garden,
+                garden_id=garden_id,
             ))
 
         return results
