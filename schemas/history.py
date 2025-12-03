@@ -12,6 +12,8 @@ class PlantHistoryResponse(BaseModel):
     description: Optional[str]
     details: Optional[Dict[str, Any]]
     created_at: datetime
+    in_garden: Optional[bool]
+    garden_id: Optional[int]
 
     class Config:
         from_attributes = True
