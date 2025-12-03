@@ -91,29 +91,36 @@ async def get_user_garden_list(
                     full_gallery.append(f"{base_url}/{clean_path}")
 
         display_nickname = plant.nickname if plant.nickname else plant.plant_name
+        garden_item = await UserGarden.get_or_none(
+            user=current_user,
+            plant_name=plant.plant_name
+        )
 
+        in_garden = garden_item is not None
+        garden_id = garden_item.id if garden_item else None
         results.append(GardenListResponse(
             id=plant.id,
             plant_name=plant.plant_name,
             nickname=display_nickname,
             image_path=full_main_url,
             image_paths=full_gallery,
-            details=plant.details or {}
+            details=plant.details or {},
+            in_garden=in_garden,
+            garden_id=garden_id,
         ))
 
     return results
 
 
-
-@router.delete("/{plant_id}")
+@router.delete("/{garden_id}")
 async def delete_plant_from_garden(
-    plant_id: int,
-    current_user: User = Depends(get_current_user)
+        garden_id: int,
+        current_user: User = Depends(get_current_user)
 ):
-    deleted_count = await UserGarden.filter(id=plant_id, user=current_user).delete()
+    deleted_count = await UserGarden.filter(id=garden_id, user=current_user).delete()
     if not deleted_count:
         raise HTTPException(status_code=404, detail="گیاه یافت نشد")
-    return {"status": "deleted", "id": plant_id}
+    return {"status": "deleted", "id": garden_id}
 
 
 @router.delete("/history/{history_id}")

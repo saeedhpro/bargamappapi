@@ -14,3 +14,5 @@ class GardenListResponse(BaseModel):
     image_path: Optional[str] = None
     image_paths: List[str] | None = []
     details: dict | None = {}
+    in_garden: bool | None = False
+    garden_id: int | None
