@@ -107,9 +107,8 @@ class SubscriptionService:
                 detail="محدودیت استفاده روزانه شما تمام شده است."
             )
 
-        # ۶. ثبت استفاده
         await UsageLog.create(
-            user_id=user_id, # استفاده از ID امن‌تر است اگر آبجکت یوزر در دسترس نباشد
+            user_id=user_id,
             subscription=active_sub,
             tool_type=tool_type,
             created_at=now

@@ -29,7 +29,7 @@ client = OpenAI(
 class PlantIdentifierService:
 
     @staticmethod
-    async def identify_and_analyze(image_file: UploadFile, user: User):
+    async def identify_and_analyze_old(image_file: UploadFile, user: User):
         """
         شناسایی گیاه، مدیریت هوشمند تاریخچه کاربر و بررسی حضور در باغچه.
 
@@ -232,3 +232,165 @@ class PlantIdentifierService:
         }
         print(response)
         return response
+
+    # ----------------------------------------------------------------------
+    # نسخه جدید (ChatGPT Vision)  ←  این نسخه فعال است
+    # ----------------------------------------------------------------------
+    @staticmethod
+    async def identify_and_analyze(image_file: UploadFile, user: User):
+
+        # ---------------------------------------------------------------
+        # 1) ذخیره فایل در سرور
+        # ---------------------------------------------------------------
+        image_content = await image_file.read()
+        ext = image_file.filename.split(".")[-1]
+        filename = f"{uuid.uuid4()}.{ext}"
+        file_path = os.path.join(UPLOAD_DIR, filename)
+
+        with open(file_path, "wb") as f:
+            f.write(image_content)
+
+        saved_image_url = f"/static/uploads/plants/{filename}"
+
+        # Base64 برای GPT Vision
+        image_base64 = base64.b64encode(image_content).decode("utf-8")
+        data_url = f"data:{image_file.content_type};base64,{image_base64}"
+
+        # ---------------------------------------------------------------
+        # 2) ارسال عکس به ChatGPT برای تشخیص گیاه
+        # ---------------------------------------------------------------
+        try:
+            prompt = (
+                "این تصویر یک گیاه است. لطفاً آن را دقیق تحلیل کن و فقط و فقط JSON زیر را بده:\n"
+                "{\n"
+                "  \"scientific_name\": \"نام علمی دقیق\",\n"
+                "  \"common_name\": \"نام رایج لاتین\",\n"
+                "  \"common_name_fa\": \"نام فارسی اگر موجود بود\",\n"
+                "  \"confidence\": عدد بین 0 تا 100,\n"
+                "  \"description\": \"توضیح کوتاه\",\n"
+                "  \"water\": \"خلاصه آبیاری\",\n"
+                "  \"water_detail\": \"توضیح کامل آبیاری\",\n"
+                "  \"light\": \"نور مناسب\",\n"
+                "  \"light_detail\": \"توضیح کامل نور\",\n"
+                "  \"temp\": \"دمای مناسب\",\n"
+                "  \"fertilizer\": \"کود مناسب\",\n"
+                "  \"difficulty\": \"درجه سختی نگهداری\"\n"
+                "}\n"
+                "فقط JSON بده."
+            )
+
+            chat_response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": prompt},
+                            {"type": "input_image", "image_url": data_url},
+                        ],
+                    }
+                ],
+                response_format={"type": "json_object"},
+            )
+
+            info = json.loads(chat_response.choices[0].message.content)
+
+            scientific_name = info.get("scientific_name", "").strip()
+            common_name_fa = info.get("common_name_fa", "") or ""
+            accuracy = info.get("confidence", 65)
+
+            # بقیه اطلاعات JSON
+            care_info = {
+                k: v
+                for k, v in info.items()
+                if k not in ["scientific_name", "confidence"]
+            }
+            description = info.get("description", "")
+
+        except Exception as e:
+            print("GPT Vision Error:", e)
+            raise HTTPException(status_code=500, detail="خطا در تحلیل تصویر توسط مدل هوش مصنوعی.")
+
+        if not scientific_name:
+            raise HTTPException(status_code=404, detail="مدل نتوانست گیاه را شناسایی کند.")
+
+        # ---------------------------------------------------------------
+        # 3) بررسی revisited
+        # ---------------------------------------------------------------
+        existing_user_history = await PlantHistory.filter(
+            user=user,
+            plant_name=scientific_name,
+        ).first()
+
+        if existing_user_history:
+            # افزودن عکس جدید
+            image_paths = existing_user_history.image_paths or []
+            image_paths.append(saved_image_url)
+
+            existing_user_history.image_paths = image_paths
+            existing_user_history.accuracy = accuracy
+            existing_user_history.created_at = datetime.utcnow()
+
+            # اگر image_path خالی بود، فقط یکبار ست بشه
+            if not existing_user_history.image_path:
+                existing_user_history.image_path = saved_image_url
+
+            await existing_user_history.save()
+
+            is_in_garden = await UserGarden.filter(
+                user=user, plant_name=scientific_name
+            ).exists()
+
+            return {
+                "status": "revisited",
+                "history_id": existing_user_history.id,
+                "plant_name": scientific_name,
+                "common_name": common_name_fa,
+                "common_name_fa": common_name_fa,
+                "image_url": saved_image_url,
+                "image_paths": image_paths,
+                "accuracy": accuracy,
+                "description": existing_user_history.description,
+                "in_garden": is_in_garden,
+                **(existing_user_history.details or {}),
+            }
+
+        # ---------------------------------------------------------------
+        # 4) استفاده از کش عمومی (اگر قبلاً ذخیره شده)
+        # ---------------------------------------------------------------
+        cached = await PlantHistory.filter(
+            plant_name=scientific_name,
+            details__isnull=False
+        ).first()
+
+        if cached:
+            care_info = cached.details
+            description = cached.description
+
+        # ---------------------------------------------------------------
+        # 5) ثبت رکورد جدید
+        # ---------------------------------------------------------------
+        new_history = await PlantHistory.create(
+            user=user,
+            image_path=saved_image_url,
+            plant_name=scientific_name,
+            common_name=common_name_fa,
+            image_paths=[],
+            accuracy=accuracy,
+            description=description,
+            details=care_info or None,
+        )
+
+        return {
+            "status": "success",
+            "history_id": new_history.id,
+            "plant_name": scientific_name,
+            "common_name": common_name_fa,
+            "common_name_fa": common_name_fa,
+            "image_url": saved_image_url,
+            "image_paths": [],
+            "accuracy": accuracy,
+            "description": description,
+            "in_garden": False,
+            **(care_info or {}),
+        }
