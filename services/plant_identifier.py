@@ -280,8 +280,21 @@ class PlantIdentifierService:
             print("[IDENTIFY] ERROR base64:", e)
             traceback.print_exc()
             raise
+        mime = image_file.content_type
+        if not mime or not mime.startswith("image/"):
+            ext = image_file.filename.split(".")[-1].lower()
+            if ext in ["jpg", "jpeg"]:
+                mime = "image/jpeg"
+            elif ext == "png":
+                mime = "image/png"
+            elif ext == "webp":
+                mime = "image/webp"
+            else:
+                mime = "image/jpeg"
 
-        data_url = f"data:{image_file.content_type};base64,{image_base64}"
+        data_url = f"data:{mime};base64,{image_base64}"
+
+        # data_url = f"data:{image_file.content_type};base64,{image_base64}"
         print("[IDENTIFY] Created data_url")
 
         # ---------------------------------------------------------------
