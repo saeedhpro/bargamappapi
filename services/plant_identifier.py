@@ -310,7 +310,7 @@ class PlantIdentifierService:
                 "  \"common_name\": \"نام رایج لاتین\",\n"
                 "  \"common_name_fa\": \"نام فارسی اگر موجود بود\",\n"
                 "  \"confidence\": عدد بین 0 تا 100,\n"
-                "  \"description\": \"توضیح کوتاه\",\n"
+                "  \"description\": \"توضیح کوتاه حداقل ۴۰ کلمه\",\n"
                 "  \"water\": \"خلاصه آبیاری\",\n"
                 "  \"water_detail\": \"توضیح کامل آبیاری\",\n"
                 "  \"light\": \"نور مناسب\",\n"
