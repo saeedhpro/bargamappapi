@@ -31,7 +31,7 @@ client = OpenAI(
 class PlantIdentifierService:
 
     @staticmethod
-    async def identify_and_analyze_old(image_file: UploadFile, user: User):
+    async def identify_and_analyze(image_file: UploadFile, user: User):
         """
         شناسایی گیاه، مدیریت هوشمند تاریخچه کاربر و بررسی حضور در باغچه.
 
@@ -239,7 +239,7 @@ class PlantIdentifierService:
     # نسخه جدید (ChatGPT Vision)  ←  این نسخه فعال است
     # ----------------------------------------------------------------------
     @staticmethod
-    async def identify_and_analyze(image_file: UploadFile, user: User):
+    async def identify_and_analyze_new(image_file: UploadFile, user: User):
 
         print("\n\n[IDENTIFY] --- Start identify_and_analyze ---")
         print(f"[IDENTIFY] User: {user.id}")
