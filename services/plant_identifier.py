@@ -3,6 +3,7 @@ import json
 import uuid
 import requests
 from datetime import datetime
+import base64
 
 from openai import OpenAI
 from fastapi import UploadFile, HTTPException
