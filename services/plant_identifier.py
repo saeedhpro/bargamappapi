@@ -4,6 +4,7 @@ import uuid
 import requests
 from datetime import datetime
 import base64
+import traceback
 
 from openai import OpenAI
 from fastapi import UploadFile, HTTPException
@@ -240,26 +241,54 @@ class PlantIdentifierService:
     @staticmethod
     async def identify_and_analyze(image_file: UploadFile, user: User):
 
+        print("\n\n[IDENTIFY] --- Start identify_and_analyze ---")
+        print(f"[IDENTIFY] User: {user.id}")
+        print(f"[IDENTIFY] Filename: {image_file.filename}")
+
         # ---------------------------------------------------------------
         # 1) ذخیره فایل در سرور
         # ---------------------------------------------------------------
-        image_content = await image_file.read()
+        try:
+            image_content = await image_file.read()
+            print(f"[IDENTIFY] Image content size: {len(image_content)} bytes")
+        except Exception as e:
+            print("[IDENTIFY] ERROR reading file:", e)
+            traceback.print_exc()
+            raise
+
         ext = image_file.filename.split(".")[-1]
         filename = f"{uuid.uuid4()}.{ext}"
         file_path = os.path.join(UPLOAD_DIR, filename)
 
-        with open(file_path, "wb") as f:
-            f.write(image_content)
+        try:
+            with open(file_path, "wb") as f:
+                f.write(image_content)
+            print(f"[IDENTIFY] Saved image to: {file_path}")
+        except Exception as e:
+            print("[IDENTIFY] ERROR saving file:", e)
+            traceback.print_exc()
+            raise
 
         saved_image_url = f"/static/uploads/plants/{filename}"
+        print(f"[IDENTIFY] Saved image URL: {saved_image_url}")
 
         # Base64 برای GPT Vision
-        image_base64 = base64.b64encode(image_content).decode("utf-8")
+        try:
+            image_base64 = base64.b64encode(image_content).decode("utf-8")
+            print("[IDENTIFY] Base64 encode success")
+        except Exception as e:
+            print("[IDENTIFY] ERROR base64:", e)
+            traceback.print_exc()
+            raise
+
         data_url = f"data:{image_file.content_type};base64,{image_base64}"
+        print("[IDENTIFY] Created data_url")
 
         # ---------------------------------------------------------------
         # 2) ارسال عکس به ChatGPT برای تشخیص گیاه
         # ---------------------------------------------------------------
+        print("[IDENTIFY] Calling GPT Vision...")
+
         try:
             prompt = (
                 "این تصویر یک گیاه است. لطفاً آن را دقیق تحلیل کن و فقط و فقط JSON زیر را بده:\n"
@@ -280,51 +309,68 @@ class PlantIdentifierService:
                 "فقط JSON بده."
             )
 
+            # ❗ اصلاح مهم: input_text → text
             chat_response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {
                         "role": "user",
                         "content": [
-                            {"type": "input_text", "text": prompt},
-                            {"type": "input_image", "image_url": data_url},
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": data_url
+                                },
+                            },
                         ],
                     }
                 ],
                 response_format={"type": "json_object"},
             )
 
-            info = json.loads(chat_response.choices[0].message.content)
+            print("[IDENTIFY] GPT Response received.")
+            print("[IDENTIFY] Raw response object:", chat_response)
+
+            raw_content = chat_response.choices[0].message.content
+            print("[IDENTIFY] Raw content:", raw_content)
+
+            info = json.loads(raw_content)
+            print("[IDENTIFY] JSON parsed successfully")
 
             scientific_name = info.get("scientific_name", "").strip()
             common_name_fa = info.get("common_name_fa", "") or ""
             accuracy = info.get("confidence", 65)
 
-            # بقیه اطلاعات JSON
-            care_info = {
-                k: v
-                for k, v in info.items()
-                if k not in ["scientific_name", "confidence"]
-            }
+            print(f"[IDENTIFY] Parsed scientific_name: {scientific_name}")
+            print(f"[IDENTIFY] accuracy: {accuracy}")
+
+            care_info = {k: v for k, v in info.items() if k not in ["scientific_name", "confidence"]}
             description = info.get("description", "")
 
         except Exception as e:
-            print("GPT Vision Error:", e)
-            raise HTTPException(status_code=500, detail="خطا در تحلیل تصویر توسط مدل هوش مصنوعی.")
+            print("\n[IDENTIFY] --- GPT Vision Error ---")
+            print("[IDENTIFY] Exception:", e)
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"GPT Vision Error: {str(e)}")
 
         if not scientific_name:
+            print("[IDENTIFY] No scientific name returned by GPT")
             raise HTTPException(status_code=404, detail="مدل نتوانست گیاه را شناسایی کند.")
 
         # ---------------------------------------------------------------
         # 3) بررسی revisited
         # ---------------------------------------------------------------
+        print("[IDENTIFY] Checking revisited...")
+
         existing_user_history = await PlantHistory.filter(
             user=user,
             plant_name=scientific_name,
         ).first()
 
         if existing_user_history:
-            # افزودن عکس جدید
+            print("[IDENTIFY] revisited: existing record found:", existing_user_history.id)
+
             image_paths = existing_user_history.image_paths or []
             image_paths.append(saved_image_url)
 
@@ -332,16 +378,14 @@ class PlantIdentifierService:
             existing_user_history.accuracy = accuracy
             existing_user_history.created_at = datetime.utcnow()
 
-            # اگر image_path خالی بود، فقط یکبار ست بشه
             if not existing_user_history.image_path:
                 existing_user_history.image_path = saved_image_url
 
             await existing_user_history.save()
 
-            is_in_garden = await UserGarden.filter(
-                user=user, plant_name=scientific_name
-            ).exists()
+            is_in_garden = await UserGarden.filter(user=user, plant_name=scientific_name).exists()
 
+            print("[IDENTIFY] revisited complete.")
             return {
                 "status": "revisited",
                 "history_id": existing_user_history.id,
@@ -357,20 +401,26 @@ class PlantIdentifierService:
             }
 
         # ---------------------------------------------------------------
-        # 4) استفاده از کش عمومی (اگر قبلاً ذخیره شده)
+        # 4) استفاده از کش عمومی
         # ---------------------------------------------------------------
+        print("[IDENTIFY] Checking cached data...")
         cached = await PlantHistory.filter(
             plant_name=scientific_name,
             details__isnull=False
         ).first()
 
         if cached:
+            print("[IDENTIFY] Cache hit:", cached.id)
             care_info = cached.details
             description = cached.description
+        else:
+            print("[IDENTIFY] No cached data.")
 
         # ---------------------------------------------------------------
         # 5) ثبت رکورد جدید
         # ---------------------------------------------------------------
+        print("[IDENTIFY] Creating new history record...")
+
         new_history = await PlantHistory.create(
             user=user,
             image_path=saved_image_url,
@@ -381,6 +431,8 @@ class PlantIdentifierService:
             description=description,
             details=care_info or None,
         )
+
+        print("[IDENTIFY] New record created:", new_history.id)
 
         return {
             "status": "success",
