@@ -1,6 +1,8 @@
 from fastapi import APIRouter, WebSocket, Depends
 from starlette.websockets import WebSocketDisconnect
 
+from api.deps import get_current_user
+from models.user import User
 from services.chat_service import ChatService
 from services.websocket_manager import WebSocketManager
 
@@ -13,7 +15,8 @@ ws_manager = WebSocketManager()
 async def chat_ws(
     websocket: WebSocket,
     conversation_id: int,
-    service: ChatService = Depends()
+    service: ChatService = Depends(),
+    current_user: User = Depends(get_current_user)
 ):
     """WebSocket برای چت لحظه‌ای"""
     await websocket.accept()
@@ -32,7 +35,8 @@ async def chat_ws(
 
                 msg = await service.send_message(
                     conversation_id=conversation_id,
-                    sender=data.get("sender", "user"),
+                    sender_type=data.get("sender", "user"),
+                    sender_user=current_user,
                     text=data.get("text"),
                     file_url=data.get("file_url"),
                     message_type=message_type
