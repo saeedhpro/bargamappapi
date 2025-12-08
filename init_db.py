@@ -12,6 +12,9 @@ TORTOISE_ORM = {
                 "models.subscription",
                 "models.history",
                 "models.garden",
+                "models.chat_conversation",
+                "models.role",
+                "models.chat_message",
                 "aerich.models"
             ],
             "default_connection": "default",

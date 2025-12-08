@@ -6,6 +6,8 @@ from core.cache import redis_client
 
 from core.config import settings
 
+SMS_KEY = "9cd53bb4d1dfff5825b6526e7d78a210b92565ff5259b8326e82bba4bb15276c"
+
 
 class OTPService:
     @staticmethod
