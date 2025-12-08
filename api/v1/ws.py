@@ -1,4 +1,5 @@
 from fastapi import APIRouter, WebSocket, Depends, Query
+from starlette import status
 from starlette.websockets import WebSocketDisconnect
 
 from api.deps import get_current_user
@@ -16,17 +17,18 @@ async def chat_ws(
     websocket: WebSocket,
     conversation_id: int,
     service: ChatService = Depends(),
-    token: str = Query(...)
+    user_id: str = Query(...)
 ):
     try:
-        current_user = await get_current_user_from_token(token)
+        current_user = await User.get_or_none(id=user_id).prefetch_related("role")
+        if not current_user:
+            print(f"❌ User {user_id} not found")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
     except Exception as e:
-        print(f"❌ Authentication failed: {e}")
+        print(f"❌ Auth error: {e}")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
-    """WebSocket برای چت لحظه‌ای"""
-    await websocket.accept()
-    await ws_manager.add(conversation_id, websocket)
 
     try:
         while True:
