@@ -72,7 +72,7 @@ class ChatService:
         msg = await ChatMessage.create(
             conversation_id=conversation_id,
             sender_user=sender_user,
-            sender_type=sender_type,
+            sender=sender_type,
             text=text,
             file_url=file_url,
             message_type=message_type,
