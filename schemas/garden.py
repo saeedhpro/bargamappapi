@@ -16,3 +16,5 @@ class GardenListResponse(BaseModel):
     details: dict | None = {}
     in_garden: bool | None = False
     garden_id: int | None
+    diseases: Optional[str]
+    pest_control: Optional[str]

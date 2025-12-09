@@ -69,8 +69,6 @@ async def get_user_garden_list(
     results = []
 
     for plant in plants:
-
-        # full image_path (thumbnail)
         full_main_url = None
         if plant.image_path:
             if plant.image_path.startswith("http"):
@@ -79,7 +77,6 @@ async def get_user_garden_list(
                 clean_path = plant.image_path.lstrip("/")
                 full_main_url = f"{base_url}/{clean_path}"
 
-        # full image_paths (gallery)
         full_gallery = []
         if plant.image_paths:
             for p in plant.image_paths:
@@ -89,16 +86,23 @@ async def get_user_garden_list(
                     clean_path = p.lstrip("/")
                     full_gallery.append(f"{base_url}/{clean_path}")
 
-        display_nickname = plant.nickname if plant.nickname else plant.plant_name
+        details_data = plant.details or {}
+        diseases = details_data.get("diseases", None)
+        pest_control = details_data.get("pest_control", None)
+
+        display_nickname = plant.nickname or plant.plant_name
+
         results.append(GardenListResponse(
             id=plant.id,
             plant_name=plant.plant_name,
             nickname=display_nickname,
             image_path=full_main_url,
             image_paths=full_gallery,
-            details=plant.details or {},
+            details=details_data,
             in_garden=True,
             garden_id=plant.id,
+            diseases=diseases,
+            pest_control=pest_control,
         ))
 
     return results

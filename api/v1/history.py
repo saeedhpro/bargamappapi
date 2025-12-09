@@ -62,6 +62,9 @@ async def get_plants_history(
 
             in_garden = garden_item is not None
             garden_id = garden_item.id if garden_item else None
+            details = plant.details or {}
+            diseases = details.get("diseases", "")
+            pest_control = details.get("pest_control", "")
             results.append(PlantHistoryResponse(
                 id=plant.id,
                 plant_name=plant.plant_name,
@@ -73,7 +76,9 @@ async def get_plants_history(
                 description=plant.description if plant.description else "",
                 in_garden=in_garden,
                 garden_id=garden_id,
-                image_paths=full_gallery
+                image_paths=full_gallery,
+                diseases=diseases,
+                pest_control=pest_control
             ))
 
         return results

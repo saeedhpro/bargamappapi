@@ -15,6 +15,8 @@ class PlantHistoryResponse(BaseModel):
     created_at: datetime
     in_garden: Optional[bool]
     garden_id: Optional[int]
+    diseases: Optional[str]
+    pest_control: Optional[str]
 
     class Config:
         from_attributes = True
