@@ -1,9 +1,9 @@
+from core.logger import db_logger
 from models.chat_conversation import ChatConversation
 from models.chat_message import ChatMessage
 from tortoise.expressions import Q
 from models.user import User
 from datetime import datetime
-from utils.logger import db_logger  # ✅ اضافه شد
 
 
 class ChatService:
