@@ -15,6 +15,7 @@ TORTOISE_ORM = {
                 "models.chat_conversation",
                 "models.role",
                 "models.chat_message",
+                "models.department",
                 "aerich.models"
             ],
             "default_connection": "default",

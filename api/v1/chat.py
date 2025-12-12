@@ -1,7 +1,7 @@
 import os
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, UploadFile, Request
+from fastapi import APIRouter, Depends, UploadFile, Request, HTTPException
 
 from api.deps import get_current_user
 from models.user import User
@@ -21,7 +21,10 @@ async def start_conversation(
 ):
     """ایجاد مکالمه جدید"""
     title = payload.get("title", "مکالمه جدید")
-    conv = await service.create_conversation(title, user=current_user)
+    department_id = payload.get("department_id")  # ✅
+    if not department_id:
+        raise HTTPException(400, "انتخاب دپارتمان الزامی است")
+    conv = await service.create_conversation(title, user=current_user, department_id=department_id)
     return {"conversation": conv}
 
 

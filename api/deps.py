@@ -1,3 +1,5 @@
+from typing import List
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError
@@ -54,3 +56,27 @@ async def get_current_user_from_token(token: str) -> User:
         raise credentials_exception
 
     return user
+
+
+def require_role(allowed_roles: List[str]):
+    async def role_checker(
+            current_user: User = Depends(get_current_user)
+    ) -> User:
+        if not hasattr(current_user, 'role') or current_user.role is None:
+            await current_user.fetch_related("role")
+
+        if current_user.role is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User has no role assigned"
+            )
+
+        if current_user.role.name not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. Required roles: {', '.join(allowed_roles)}"
+            )
+
+        return current_user
+
+    return role_checker

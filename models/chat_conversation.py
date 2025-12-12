@@ -1,5 +1,4 @@
 from tortoise import fields, models
-
 from models.chat_message import ChatMessage
 
 
@@ -15,6 +14,13 @@ class ChatConversation(models.Model):
         related_name="conversations",
         on_delete=fields.CASCADE,
         description="کاربری که این مکالمه را ایجاد کرده"
+    )
+
+    department = fields.ForeignKeyField(
+        "models.Department",
+        related_name="conversations",
+        on_delete=fields.RESTRICT,
+        description="دپارتمان پشتیبانی"
     )
 
     class Meta:

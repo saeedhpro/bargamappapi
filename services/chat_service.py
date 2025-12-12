@@ -11,16 +11,31 @@ class ChatService:
     # --------------------------------------
     # ایجاد مکالمه جدید
     # --------------------------------------
-    async def create_conversation(self, title: str, user: User):
-        db_logger.logger.info(f"Creating new conversation: title='{title}', user_id={user.id}")
+    async def create_conversation(self, title: str, user: User, department_id: int):
+        db_logger.logger.info(
+            f"Creating new conversation: title='{title}', "
+            f"user_id={user.id}, department_id={department_id}"
+        )
 
-        conv = await ChatConversation.create(title=title, user=user)
-        await conv.fetch_related("user", "user__role")
+        from models.department import Department
+        dept = await Department.get_or_none(id=department_id, is_active=True)
+
+        if not dept:
+            raise ValueError(f"Department {department_id} not found or inactive")
+
+        conv = await ChatConversation.create(
+            title=title,
+            user=user,
+            department_id=department_id
+        )
+
+        await conv.fetch_related("user", "user__role", "department")
 
         db_logger.log_create("ChatConversation", {
             "id": conv.id,
             "title": title,
-            "user_id": user.id
+            "user_id": user.id,
+            "department_id": department_id
         })
 
         return await self.serialize_conversation(conv)
@@ -50,7 +65,7 @@ class ChatService:
             .order_by("-last_activity")
             .offset(offset)
             .limit(size)
-            .prefetch_related("user", "user__role")
+            .prefetch_related("user", "user__role", "department")
         )
 
         result = []
@@ -66,12 +81,21 @@ class ChatService:
     async def get_messages(self, conversation_id: int):
         db_logger.logger.debug(f"Fetching messages for conversation {conversation_id}")
 
+        conv = await ChatConversation.get_or_none(id=conversation_id).prefetch_related(
+            "user", "user__role", "department"
+        )
+
+        if not conv:
+            raise ValueError(f"Conversation {conversation_id} not found")
         msgs = await ChatMessage.filter(
             conversation_id=conversation_id
         ).order_by("id").prefetch_related("sender_user", "sender_user__role")
 
         db_logger.logger.info(f"✅ Retrieved {len(msgs)} messages from conversation {conversation_id}")
-        return [await self.serialize_message(msg) for msg in msgs]
+        return {
+            "conversation": await self.serialize_conversation(conv),
+            "messages": [await self.serialize_message(msg) for msg in msgs]
+        }
 
     # --------------------------------------
     # ارسال پیام جدید
@@ -164,14 +188,14 @@ class ChatService:
     # Serialize کردن مکالمه
     # --------------------------------------
     async def serialize_conversation(self, conv: ChatConversation):
-        """تبدیل مکالمه به دیکشنری - با جلوگیری از QuerySet"""
+        """تبدیل مکالمه به دیکشنری"""
         try:
             # ✅ دریافت آخرین پیام
             last_msg = await ChatMessage.filter(
                 conversation_id=conv.id
             ).order_by("-id").prefetch_related("sender_user", "sender_user__role").first()
 
-            # ✅ تبدیل user به دیکشنری خالص
+            # ✅ تبدیل user به دیکشنری
             user_data = None
             if conv.user_id:
                 try:
@@ -189,14 +213,30 @@ class ChatService:
                     db_logger.logger.warning(f"⚠️ خطا در serialize کردن user: {e}")
                     user_data = None
 
+            # ✅ تبدیل department به دیکشنری
+            department_data = None
+            if conv.department_id:
+                try:
+                    if not hasattr(conv, '_prefetched_objects') or 'department' not in conv._prefetched_objects:
+                        await conv.fetch_related("department")
+
+                    if conv.department:
+                        department_data = {
+                            "id": conv.department.id,
+                            "name": conv.department.name,
+                            "is_active": conv.department.is_active
+                        }
+                except Exception as e:
+                    db_logger.logger.warning(f"⚠️ خطا در serialize کردن department: {e}")
+
             return {
                 "id": conv.id,
                 "title": conv.title,
                 "created_at": conv.created_at.isoformat(),
-                "last_activity": conv.last_activity.isoformat() if hasattr(conv,
-                                                                           "last_activity") and conv.last_activity else None,
+                "last_activity": conv.last_activity.isoformat() if hasattr(conv, "last_activity") and conv.last_activity else None,
                 "last_message": await self.serialize_message(last_msg) if last_msg else None,
-                "user": user_data
+                "user": user_data,
+                "department": department_data
             }
 
         except Exception as e:
@@ -207,7 +247,7 @@ class ChatService:
     # Serialize کردن پیام
     # --------------------------------------
     async def serialize_message(self, msg: ChatMessage):
-        """تبدیل پیام به دیکشنری - با جلوگیری از QuerySet"""
+        """تبدیل پیام به دیکشنری"""
         if not msg:
             return None
 
@@ -232,7 +272,7 @@ class ChatService:
                 "id": msg.id,
                 "conversation_id": msg.conversation_id,
                 "sender_user": sender_data,
-                "sender_type": msg.sender_type if hasattr(msg, "sender_type") else "user",
+                "sender_type": msg.sender if hasattr(msg, "sender") else "user",
                 "text": msg.text,
                 "file_url": msg.file_url,
                 "message_type": msg.message_type,
