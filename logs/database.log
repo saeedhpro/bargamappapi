@@ -1,0 +1,7 @@
+2025-12-12 13:01:16 | [36mDEBUG[0m | database | get_messages:82 | Fetching messages for conversation 1
+2025-12-12 13:01:16 | [32mINFO[0m | database | get_messages:94 | ✅ Retrieved 3 messages from conversation 1
+2025-12-12 13:01:20 | [36mDEBUG[0m | database | get_messages:82 | Fetching messages for conversation 2
+2025-12-12 13:01:20 | [32mINFO[0m | database | get_messages:94 | ✅ Retrieved 2 messages from conversation 2
+2025-12-12 13:01:23 | [36mDEBUG[0m | database | get_messages:82 | Fetching messages for conversation 3
+2025-12-12 13:01:23 | [32mINFO[0m | database | get_messages:94 | ✅ Retrieved 1 messages from conversation 3
+2025-12-12 13:01:26 | [36mDEBUG[0m | database | get_messages:82 | Fetching messages for conversation 4
