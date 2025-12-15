@@ -85,4 +85,4 @@ async def get_plants_history(
 
     except Exception as e:
         print(f"Error fetching history: {e}")
-        raise HTTPException(status_code=500, detail="خطا در دریافت تاریخچه گیاهان")
+        raise HTTPException(status_code=500, detail=str(e))
