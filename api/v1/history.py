@@ -63,8 +63,8 @@ async def get_plants_history(
             in_garden = garden_item is not None
             garden_id = garden_item.id if garden_item else None
             details = plant.details or {}
-            diseases = details.get("diseases", "")
-            pest_control = details.get("pest_control", "")
+            diseases = normalize_text(details.get("diseases"))
+            pest_control = normalize_text(details.get("pest_control"))
             results.append(PlantHistoryResponse(
                 id=plant.id,
                 plant_name=plant.plant_name,
@@ -86,3 +86,9 @@ async def get_plants_history(
     except Exception as e:
         print(f"Error fetching history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def normalize_text(val):
+    if isinstance(val, dict):
+        return "\n".join(f"{k}: {v}" for k, v in val.items())
+    return val
