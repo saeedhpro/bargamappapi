@@ -13,6 +13,7 @@ from api.v1.ws import router as ws_router
 from api.v1.department import router as department_router
 from fastapi.staticfiles import StaticFiles
 
+from core.cors import CORSStaticFiles
 from init_db import init_db, init_db_data
 
 middleware = [
@@ -30,7 +31,7 @@ app = FastAPI(
     middleware=middleware
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", CORSStaticFiles(directory="static"), name="static")
 
 
 @app.on_event("startup")
