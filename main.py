@@ -13,6 +13,8 @@ from api.v1.ws import router as ws_router
 from api.v1.department import router as department_router
 from api.v1.admin.auth import router as admin_auth_router
 from api.v1.admin.users import router as admin_users_router
+from api.v1.admin.roles import router as admin_roles_router
+from api.v1.admin.history import router as admin_history_router
 
 from core.cors import CORSStaticFiles
 from init_db import init_db, init_db_data
@@ -53,3 +55,5 @@ app.include_router(department_router)
 
 app.include_router(admin_auth_router)
 app.include_router(admin_users_router)
+app.include_router(admin_roles_router)
+app.include_router(admin_history_router)
