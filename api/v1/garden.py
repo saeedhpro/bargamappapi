@@ -87,8 +87,8 @@ async def get_user_garden_list(
                     full_gallery.append(f"{base_url}/{clean_path}")
 
         details_data = plant.details or {}
-        diseases = details_data.get("diseases", None)
-        pest_control = details_data.get("pest_control", None)
+        diseases = normalize_text(details_data.get("diseases"))
+        pest_control = normalize_text(details_data.get("pest_control"))
 
         display_nickname = plant.nickname or plant.plant_name
 
@@ -133,3 +133,8 @@ async def delete_garden_item_by_history(
         raise HTTPException(status_code=404, detail="رکوردی برای حذف یافت نشد")
 
     return {"status": "deleted", "history_id": history_id}
+
+def normalize_text(val):
+    if isinstance(val, dict):
+        return "\n".join(f"{k}: {v}" for k, v in val.items())
+    return val
