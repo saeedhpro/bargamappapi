@@ -10,7 +10,6 @@ security = HTTPBearer()
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
-    # تغییر ۲: استخراج توکن از آبجکت credentials
     token = credentials.credentials
 
     credentials_exception = HTTPException(
@@ -56,6 +55,28 @@ async def get_current_user_from_token(token: str) -> User:
         raise credentials_exception
 
     return user
+
+ALLOWED_ROLES = ["admin", "support"]
+
+
+async def get_current_admin(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    await current_user.fetch_related("role")
+
+    if not current_user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User has no role"
+        )
+
+    if current_user.role.name not in ALLOWED_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access only"
+        )
+
+    return current_user
 
 
 def require_role(allowed_roles: List[str]):

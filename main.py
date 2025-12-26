@@ -11,7 +11,8 @@ from api.v1.history import router as history_router
 from api.v1.chat import router as chat_router
 from api.v1.ws import router as ws_router
 from api.v1.department import router as department_router
-from fastapi.staticfiles import StaticFiles
+from api.v1.admin.auth import router as admin_auth_router
+from api.v1.admin.users import router as admin_users_router
 
 from core.cors import CORSStaticFiles
 from init_db import init_db, init_db_data
@@ -49,3 +50,6 @@ app.include_router(history_router)
 app.include_router(chat_router)
 app.include_router(ws_router)
 app.include_router(department_router)
+
+app.include_router(admin_auth_router)
+app.include_router(admin_users_router)
