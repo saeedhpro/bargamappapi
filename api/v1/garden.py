@@ -39,7 +39,7 @@ async def add_from_history(
                 "garden_id": existing_garden_item.id
             }
         )
-
+    details = "" if source_plant.details is None else source_plant.details
     # اگر گیاه در باغچه نبود، آن را ایجاد می‌کنیم
     new_garden_item = await UserGarden.create(
         user=current_user,
@@ -47,7 +47,7 @@ async def add_from_history(
         nickname=req.nickname or source_plant.common_name,
         image_path=source_plant.image_path,
         image_paths=source_plant.image_paths,
-        details=source_plant.details,
+        details=details,
         origin_history_id=source_plant.id
     )
 
